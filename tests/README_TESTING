@@ -1,0 +1,56 @@
+# palinur_matching_service — Testing setup
+
+Prerequisites
+- Git
+- Python 3.10 or 3.11 installed and available on PATH
+- (Optional) Docker if you want to run an integration DB locally later
+
+Quickstart — local
+
+1. Clone the repo
+   git clone https://github.com/itsLisis/palinur_matching_service.git
+   cd palinur_matching_service
+
+2. Create and activate a virtual environment
+   # macOS / Linux
+   python -m venv .venv
+   source .venv/bin/activate
+
+   # Windows (PowerShell)
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+
+3. Install runtime and dev dependencies
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   # dev/test deps
+   pip install -r requirements-dev.txt
+
+4. Run the test suite
+   pytest -q
+
+Running a single test
+- Run a single file:
+  pytest -q tests/test_match.py
+- Run a single test function:
+  pytest -q tests/test_match.py::test_create_match_returns_true_and_uses_timestamp
+
+Notes about tests
+- The unit tests mock functions in dao.* so they do not require a live database and run quickly.
+- Tests focus on the logic in match.py (likes, matches, breaking matches).
+- If you want integration tests later, you can add an in-memory SQLite setup or a test database with fixtures.
+
+CI (GitHub Actions)
+- There is a workflow at `.github/workflows/python-tests.yml` that runs on push and pull_request for the `main` branch and tests against Python 3.10 and 3.11.
+- The workflow installs runtime deps (requirements.txt) and dev deps (requirements-dev.txt), then runs pytest.
+
+Troubleshooting
+- pytest fails with import errors: ensure the virtualenv is activated and dependencies installed.
+- If you see tests failing because dao functions behave differently, confirm tests are properly mocking the dao functions and that match.py was updated with the corrected logic (use db session instance, datetime.utcnow(), and correct boolean returns).
+
+Next steps (suggested)
+- If you want, I can open a PR adding the tests, pytest.ini, requirements-dev.txt, and the GitHub Actions workflow.
+- Add integration tests for dao.* using an in-memory SQLite DB or test container.
+- Add coverage reporting (pytest-cov) to the workflow.
+
+If you'd like me to open the PR with the test files and CI workflow now, tell me and I will prepare it.
