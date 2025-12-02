@@ -12,7 +12,7 @@ def like_user(db: Session, sender_user_fk: int, liked_user_fk: int, link_date: O
     if check_like_exists(db, liked_user_fk, sender_user_fk):
         create_match(db, sender_user_fk, liked_user_fk) 
 
-    return like is None
+    return like is not None
 
 def check_like_exists(db: Session, sender_user_fk: int, liked_user_fk: int) -> bool:
     like = dao.find_like(db, sender_user_fk, liked_user_fk)
@@ -20,7 +20,7 @@ def check_like_exists(db: Session, sender_user_fk: int, liked_user_fk: int) -> b
 
 def create_match(db: Session, user1_fk: int, user2_fk: int):
     relacionship_state = dao.create_relationship_state(db, "matched")
-    relacionship = dao.create_couple_relationship(db, user1_fk, user2_fk, relacionship_state.id, datetime())
+    relacionship = dao.create_couple_relationship(db, user1_fk, user2_fk, relacionship_state.id, datetime.now())
 
     return relacionship is not None
 
