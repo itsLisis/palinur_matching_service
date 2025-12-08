@@ -4,7 +4,6 @@ import models
 
 app = FastAPI(title="My Dating App Service")
 
-# THIS LINE CREATES YOUR TABLES!
 Base.metadata.create_all(bind=engine)
 
 @app.get("/")
