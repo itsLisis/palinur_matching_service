@@ -43,7 +43,7 @@ class RelationshipCheckResponse(BaseModel):
     user1_id: Optional[int] = None
     user2_id: Optional[int] = None
     state: Optional[str] = None
-    creation_date: Optional[int] = None
+    creation_date: Optional[datetime] = None
 
 
 class ActiveRelationshipResponse(BaseModel):
