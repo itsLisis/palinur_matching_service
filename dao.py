@@ -8,7 +8,6 @@ import models
 
 
 def create_couple_relationship(db: Session, first_user_fk: int, second_user_fk: int, state_fk: int, creation_date: Optional[int] = None) -> models.Couple_Relationship:
-    """Create a new Couple_Relationship and return it."""
     creation_date_val = creation_date if creation_date is not None else int(datetime.timestamp())
     db_obj = models.Couple_Relationship(
         first_user_fk=first_user_fk,

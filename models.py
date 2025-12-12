@@ -11,7 +11,7 @@ class Couple_Relationship(Base):
     second_user_fk = Column(Integer, nullable=False)
     state_fk = Column(Integer, ForeignKey('Relationship_State.id'), nullable=False)
     update = Column(DateTime, onupdate=func.now())
-    creation_date = Column(Integer)
+    creation_date = Column(DateTime, default=func.now())
     
 
 class Relationship_State(Base):
