@@ -21,7 +21,7 @@ class Relationship_State(Base):
     state = Column(String(10), nullable=False)
     
 class Swiped_Users(Base):
-    __tablename__ = "Ignored_Users"
+    __tablename__ = "Swiped_Users"
     
     current_user_fk = Column(Integer, primary_key=True, index=True)
     swiped_user_fk = Column(Integer, primary_key=True, index=True)

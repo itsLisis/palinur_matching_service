@@ -22,20 +22,13 @@ async def get_potential_matches(
     - Excludes existing matches
     """
     
-    # Get list of users already liked on
-    already_licked = db.query(models.Swiped_Users.swiped_user_fk).filter(
-        models.Swiped_Users.current_user_fk == current_user_id,
-        models.Swiped_Users.is_like == True
+    # Get list of users already swiped on
+    already_swiped = db.query(models.Swiped_Users.swiped_user_fk).filter(
+        models.Swiped_Users.current_user_fk == current_user_id
     ).all()
     
-    already_swiped = db.query(models.Swiped_Users.ignored_user_fk).filter(
-        models.Swiped_Users.current_user_fk == current_user_id
-    )
-    
-    already_liked_ids = [profile[0] for profile in already_licked]
     already_swiped_ids = [profile[0] for profile in already_swiped]
-    excluded_ids = set(already_liked_ids +
-                       already_swiped_ids + 
+    excluded_ids = set(already_swiped_ids + 
                        [current_user_id])
     
     
