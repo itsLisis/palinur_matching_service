@@ -2,113 +2,30 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func
 from datetime import datetime
-import httpx
 
 from db import get_db
 import models, schemas
-from config import settings
 
 router = APIRouter(prefix="/matching", tags=["Matching"])
 
-async def are_compatible(current_profile, other_profile):
-    try:
-        async with httpx.AsyncClient() as client:
-            genders_data = await client.get(
-                f"{settings.USER_SERVICE_URL}/genders_data",
-                timeout=10.0
-            )
-            sexual_orientations_data = await client.get(
-                f"{settings.USER_SERVICE_URL}/sexual_orientations_data",
-                timeout=10.0
-            )
-    except httpx.RequestError:
-        raise HTTPException (
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="User Microservice is unavailable"
-        )
-    
-    # for gender in genders_data.json():
-    #     if current_profile["gender_id"] == gender["id"]:
-    #         current_user_gender = gender["gender_name"]
-    #     if other_profile["gender_id"] == gender["id"]:
-    #         other_profile_gender = gender["gender_name"]
-    
-    # for sexual_orientation in sexual_orientations_data.json():
-    #     if current_profile["sexual_orientation_id"] == sexual_orientation["id"]:
-    #         current_user_orientation = sexual_orientation["orientation_name"]
-    #     if other_profile["sexual_orientation_id"] == sexual_orientation["id"]:
-    #         other_user_orientation = sexual_orientation["orientation_name"]
-    
-    # match current_user_orientation:
-    #     case "hetero":
-    #         if current_user_gender == "Masculino":
-    return True
-    
-    
-@router.get("/potential", response_model=schemas.PotentialMatchesResponse)
-async def get_potential_matches(
-    current_user_id: int = Query(..., description="ID of the user"),
+@router.get("/excluded-users/{current_user_id}")
+def get_excluded_users(
+    current_user_id: int,
     db: Session = Depends(get_db)
 ):
     """
-    Get potential matches for a user
-    - Excludes already swiped users
-    - Excludes blocked users
-    - Excludes existing matches
+    Retorna los IDs de usuarios que el usuario actual ya ha swipeado.
+    El API Gateway usará esto para filtrar.
     """
-    
     # Get list of users already swiped on
     already_swiped = db.query(models.Swiped_Users.swiped_user_fk).filter(
         models.Swiped_Users.current_user_fk == current_user_id
     ).all()
     
     already_swiped_ids = [profile[0] for profile in already_swiped]
-    excluded_ids = set(already_swiped_ids + 
-                       [current_user_id])
+    excluded_ids = already_swiped_ids + [current_user_id]
     
-    # Fetch profiles from User Service
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{settings.USER_SERVICE_URL}/user/profiles",
-                timeout=10.0
-            )
-            
-            if not response.status_code == 200: 
-                return schemas.PotentialMatchesResponse(profiles=[], count=0)
-    except httpx.RequestError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Profiles service unavailable"
-        )
-    current_profile_response = None
-    try:
-        async with httpx.AsyncClient() as client:
-            current_profile_response = await client.get(
-                f"{settings.USER_SERVICE_URL}/user/profile",
-                timeout=100.
-            )
-            if not current_profile_response: raise ValueError("No found profile")
-    except httpx.RequestError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Profile service unavailable"
-        )
-    
-    profiles_data = response.json()
-    current_profile_data = current_profile_response.json()
-    
-    filtered_profiles = []
-    for profile in profiles_data:
-        if profile["id"] not in excluded_ids and await are_compatible(current_profile_data, profile):
-            filtered_profiles.append(profile)
-        
-    next_recomendation = [filtered_profiles[0]]
-    return schemas.PotentialMatchesResponse(
-        profiles=[schemas.PotentialMatchProfile(**p) for p in next_recomendation],
-        count=len(profiles_data)
-    )
-    
+    return {"excluded_ids": excluded_ids}
 
 @router.post("/swipe", response_model=schemas.SwipeResponse, status_code=status.HTTP_201_CREATED)
 def swipe_user(
@@ -122,6 +39,7 @@ def swipe_user(
             detail="You cannot swipe on yourself"
         )
     
+    # Verificar si ya hizo swipe a este usuario
     existing_swipe = db.query(models.Swiped_Users).filter(
         models.Swiped_Users.current_user_fk == current_user_id,
         models.Swiped_Users.swiped_user_fk == swipe.user_id
@@ -150,7 +68,41 @@ def swipe_user(
     
     db.add(new_swipe)
     db.commit()
-    db.refresh(new_swipe)
+    
+    # Verificar si hay MATCH (el otro usuario también dio like)
+    is_match = False
+    
+    if swipe.is_like:  # Solo verificar match si este usuario dio like
+        other_user_swipe = db.query(models.Swiped_Users).filter(
+            models.Swiped_Users.current_user_fk == swipe.user_id,
+            models.Swiped_Users.swiped_user_fk == current_user_id,
+            models.Swiped_Users.is_like == True
+        ).first()
+        
+        if other_user_swipe:
+            # ¡HAY MATCH! Crear la relación
+            is_match = True
+            
+            # Obtener o crear el estado "matched"
+            matched_state = db.query(models.Relationship_State).filter(
+                models.Relationship_State.state == "matched"
+            ).first()
+            
+            if not matched_state:
+                matched_state = models.Relationship_State(state="matched")
+                db.add(matched_state)
+                db.commit()
+                db.refresh(matched_state)
+            
+            # Crear la relación de pareja
+            new_relationship = models.Couple_Relationship(
+                first_user_fk=current_user_id,
+                second_user_fk=swipe.user_id,
+                state_fk=matched_state.id,
+                creation_date=int(datetime.now().timestamp())
+            )
+            db.add(new_relationship)
+            db.commit()
     
     response = schemas.SwipeResponse(
         sender_user_id=current_user_id,
@@ -159,6 +111,94 @@ def swipe_user(
         is_match=is_match
     )
     return response
+
+
+@router.get("/relationships/check", response_model=schemas.RelationshipCheckResponse)
+def check_relationship(
+    user1_id: int = Query(..., description="ID del primer usuario"),
+    user2_id: int = Query(..., description="ID del segundo usuario"),
+    db: Session = Depends(get_db)
+):
+    """
+    Verifica si existe una relación (match) entre dos usuarios.
+    """
+    # Buscar relación en ambas direcciones
+    relationship = db.query(models.Couple_Relationship).filter(
+        or_(
+            and_(
+                models.Couple_Relationship.first_user_fk == user1_id,
+                models.Couple_Relationship.second_user_fk == user2_id
+            ),
+            and_(
+                models.Couple_Relationship.first_user_fk == user2_id,
+                models.Couple_Relationship.second_user_fk == user1_id
+            )
+        )
+    ).first()
+    
+    if not relationship:
+        return schemas.RelationshipCheckResponse(exists=False)
+    
+    # Obtener el estado
+    state = db.query(models.Relationship_State).filter(
+        models.Relationship_State.id == relationship.state_fk
+    ).first()
+    
+    return schemas.RelationshipCheckResponse(
+        exists=True,
+        relationship_id=relationship.id,
+        user1_id=relationship.first_user_fk,
+        user2_id=relationship.second_user_fk,
+        state=state.state if state else "unknown",
+        creation_date=relationship.creation_date
+    )
+
+
+@router.get("/relationships/user/{user_id}/active", response_model=schemas.ActiveRelationshipResponse)
+def get_active_relationship(
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene la relación activa (match) de un usuario.
+    Un usuario solo puede tener un match activo a la vez.
+    """
+    # Obtener el estado "matched"
+    matched_state = db.query(models.Relationship_State).filter(
+        models.Relationship_State.state == "matched"
+    ).first()
+    
+    if not matched_state:
+        return schemas.ActiveRelationshipResponse(has_active_match=False)
+    
+    # Buscar relación activa
+    relationship = db.query(models.Couple_Relationship).filter(
+        or_(
+            models.Couple_Relationship.first_user_fk == user_id,
+            models.Couple_Relationship.second_user_fk == user_id
+        ),
+        models.Couple_Relationship.state_fk == matched_state.id
+    ).first()
+    
+    if not relationship:
+        return schemas.ActiveRelationshipResponse(has_active_match=False)
+    
+    # Determinar quién es el partner
+    partner_id = (
+        relationship.second_user_fk 
+        if relationship.first_user_fk == user_id 
+        else relationship.first_user_fk
+    )
+    
+    return schemas.ActiveRelationshipResponse(
+        has_active_match=True,
+        relationship_id=relationship.id,
+        user1_id=relationship.first_user_fk,
+        user2_id=relationship.second_user_fk,
+        partner_id=partner_id,
+        state="matched",
+        creation_date=relationship.creation_date
+    )
 
 @router.post("/change_match_state", status_code=status.HTTP_200_OK)
 def change_match_state(
