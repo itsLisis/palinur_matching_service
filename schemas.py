@@ -29,5 +29,8 @@ class SwipeResponse(BaseModel):
     reciever_user_id: int
     swiped_at: datetime
     is_match: bool
+    
+    class Config:
+        from_attributes = True
 
 

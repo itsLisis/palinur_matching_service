@@ -58,7 +58,7 @@ async def get_potential_matches(
     # Fallback empty response
     return schemas.PotentialMatchesResponse(profiles=[], count=0)
 
-@router.post("/swipe", response_model=schemas.SwipeData, status_code=status.HTTP_201_CREATED)
+@router.post("/swipe", response_model=schemas.SwipeResponse, status_code=status.HTTP_201_CREATED)
 def swipe_user(
     swipe: schemas.SwipeData,
     current_user_id: int = Query(..., description="ID of user that ignored other"),
@@ -85,14 +85,15 @@ def swipe_user(
     swiped_user_like = db.query(models.Swiped_Users.is_like).filter(
         models.Swiped_Users.current_user_fk==swipe.user_id,
         models.Swiped_Users.swiped_user_fk==current_user_id
-    ).first()
+    ).all()
     
-    is_match = False #swipe.is_like and swiped_user_like
     
+    # if swiped_user_like: is_match = swipe.is_like and swiped_user_like[0]
+    is_match = False
     new_swipe = models.Swiped_Users(
         current_user_fk=current_user_id,
         swiped_user_fk=swipe.user_id,
-        is_match = is_match,
+        is_like=swipe.is_like,
         swipe_date = datetime.today()
     )
     
@@ -103,7 +104,7 @@ def swipe_user(
     response = schemas.SwipeResponse(
         sender_user_id=current_user_id,
         reciever_user_id=swipe.user_id,
-        swiped_at=datetime.now(),
+        swiped_at=datetime.today(),
         is_match=is_match
     )
     return response
