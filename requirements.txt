@@ -4,4 +4,11 @@ sqlalchemy
 psycopg2-binary
 python-dotenv
 pydantic
+pydantic[email]
 pydantic-settings
+httpx
+bcrypt
+PyJWT
+python-multipart
+requests
+httpx

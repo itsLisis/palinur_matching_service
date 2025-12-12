@@ -19,12 +19,11 @@ class Relationship_State(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     state = Column(String(10), nullable=False)
-
     
-class Liked_Users(Base):
-    __tablename__ = "Liked_Users"
+class Swiped_Users(Base):
+    __tablename__ = "Ignored_Users"
     
-    id = Column(Integer, primary_key=True, index=True)
-    sender_user_fk = Column(Integer, nullable=False, index=True)
-    liked_user_fk =  Column(Integer, nullable=False, index=True)
-    link_date = Column(DateTime, nullable=False)
+    current_user_fk = Column(Integer, primary_key=True, index=True)
+    swiped_user_fk = Column(Integer, primary_key=True, index=True)
+    is_like = Column(Boolean, nullable=False)
+    swipe_date = Column(DateTime, nullable=False)
