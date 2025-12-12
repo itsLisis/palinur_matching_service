@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.sql import func
 from db import Base
 
@@ -11,8 +11,9 @@ class Couple_Relationship(Base):
     second_user_fk = Column(Integer, nullable=False)
     state_fk = Column(Integer, ForeignKey('Relationship_State.id'), nullable=False)
     update = Column(DateTime, onupdate=func.now())
-    creation_date = Column(Integer)
+    creation_date = Column(DateTime)
     
+    __table_args__ = (UniqueConstraint("first_user_fk", "second_user_fk", name="unique_match"),)
 
 class Relationship_State(Base):
     __tablename__ = "Relationship_State"
