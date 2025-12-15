@@ -42,11 +42,6 @@ def get_recommendable_users(db: Session, user_id: int) -> list:
 
 
 def recommend_users(db: Session, user_id: int, exclude: set = None, limit: int = None) -> list:
-    """
-    - exclude es conjunto de IDs a excluir (usuarios ya recomendados, por lo que de4beria ser una query a la lisat de usuarios ya recomendados)      
-    - limit es número máximo de recomendaciones (None = sin límite, establecer un limite)
-    Retorna una lista ordenada de IDs de mayor similitud → menor similitud.
-    """
 
     if exclude is None:
         exclude = set()
@@ -55,7 +50,6 @@ def recommend_users(db: Session, user_id: int, exclude: set = None, limit: int =
 
     candidates = get_recommendable_users(db, user_id)
 
-    #Para no recomendarse a si mismo
     candidates = [cid for cid in candidates if cid != user_id]
 
     if exclude:
@@ -72,23 +66,7 @@ def recommend_users(db: Session, user_id: int, exclude: set = None, limit: int =
 
     recommended_ids = [cid for cid, score in similarities]
 
-    #Aplicar límite
     if limit is not None:
         recommended_ids = recommended_ids[:limit]
 
     return recommended_ids
-
-
-"""
-Querys a implementar: TO DO
-  - dao.get_user(db, user_id): Para obtener el usuario por su ID
-  - dao.list_all_users(db): Devuelve una lista de los ids de todos los usuarios sin importar su orientación sexual.  
-  - dao.list_user_masc_hetero(db): Devuelve una lista de los ids de usuarios que se le pueden recomendar a un hombre heterosexual (Mujeres hetero, mujeres bi).
-  - dao.list_user_masc_homo(db): Devuelve una lista de los ids de usuarios que se le pueden recomendar a un hombre homosexual (Hombres bi, hombre homo). 
-  - dao.list_user_masc_bi(db): Devuelve una lista de los ids de usuarios que se le pueden recomendar a un hombre bisexual (Mujeres hetero, mujeres bi, Hombres bi, hombre homo).
-  - dao.list_user_fem_hete(db): Devuelve una lista de los ids de usuarios que se le pueden recomendar a una mujer heterosexual.
-  - dao.list_user_fem_homo(db): Devuelve una lista de los ids de usuarios que se le pueden recomendar a una mujer heterosexual.
-  - dao.list_user_fem_bi(db): Devuelve una lista de los ids de usuarios que se le pueden recomendar a una mujer heterosexual.
- 
-  - dao.get_user_interests(db, user_id): Obtiene el arreglo de intereses de un usuario
-"""

@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from db import Base, engine
+from db import Base, engine, SessionLocal
 from routers import matching_router
 import models
 

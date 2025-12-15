@@ -11,7 +11,7 @@ class Couple_Relationship(Base):
     second_user_fk = Column(Integer, nullable=False)
     state_fk = Column(Integer, ForeignKey('Relationship_State.id'), nullable=False)
     update = Column(DateTime, onupdate=func.now())
-    creation_date = Column(DateTime)
+    creation_date = Column(DateTime, default=func.now())
     
     __table_args__ = (UniqueConstraint("first_user_fk", "second_user_fk", name="unique_match"),)
 
