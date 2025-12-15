@@ -90,24 +90,37 @@ def filter_compatible_profiles(
     user_sexual_orientation = current_user.get("sexual_orientation")
     user_sexual_orientation_id = current_user.get("sexual_orientation_id")
     user_interests = current_user.get("interests", [])
-    
 
-    RECOMMENDATION_MAP = {
-        0: {3, 5},          # male hetero -> female hetero/bi
-        1: {1, 2},          # male homo  -> male homo/bi
-        2: {1, 2, 3, 5},    # male bi    -> male homo/bi + female hetero/bi
-        3: {0, 2},          # female hetero -> male hetero/bi
-        4: {4, 5},          # female homo  -> female homo/bi
-        5: {0, 1, 2, 4},    # female bi    -> per existing user_service (note: excludes 5)
-    }
+    # En el frontend ya se asume este mapeo (ver Ajustes.jsx): 1=hombre, 2=mujer, resto="Otro"
+    MALE_ID = 1
+    FEMALE_ID = 2
 
-    def recommendable_set_for_user() -> set[int] | None:
-        if isinstance(user_sexual_orientation_id, int):
-            return RECOMMENDATION_MAP.get(user_sexual_orientation_id)
-        return None  # unknown -> do not filter by orientation_id
-    
-    recommendable_set = recommendable_set_for_user()
-    min_orientation_pool = int(data.get("min_orientation_pool", 6))
+    def _normalize_str(v: Any) -> str:
+        return str(v).strip().lower() if v is not None else ""
+
+    def target_gender_ids_for_user() -> set[int] | None:
+        """
+        Versión robusta basada en `gender_id` (numérico), para no depender de strings.
+        En este proyecto, `sexual_orientation_id` representa la preferencia de a quién ver:
+        0=Hombres, 1=Mujeres, 2=No binarixs.
+        """
+        if not isinstance(user_sexual_orientation_id, int):
+            return None
+
+        # Preferencia: Hombres
+        if user_sexual_orientation_id == 0:
+            return {MALE_ID}
+        # Preferencia: Mujeres
+        if user_sexual_orientation_id == 1:
+            return {FEMALE_ID}
+        # Preferencia: No binarixs -> NO tenemos un id fijo, así que lo tratamos como "no (1 o 2)"
+        # y lo resolvemos en el filtro con una regla especial.
+        if user_sexual_orientation_id == 2:
+            return set()
+
+        return None
+
+    target_gender_ids = target_gender_ids_for_user()
 
     def is_compatible(profile: Dict[str, Any]) -> bool:
         pid = profile.get("id")
@@ -117,12 +130,22 @@ def filter_compatible_profiles(
         if pid == user_id:
             return False
 
-        profile_so_id = profile.get("sexual_orientation_id")
-        if recommendable_set is not None:
-            if not isinstance(profile_so_id, int):
+        # Filtro fuerte por género objetivo (basado en sexual_orientation_id):
+        # - target_gender_ids == {1} => solo hombres
+        # - target_gender_ids == {2} => solo mujeres
+        # - target_gender_ids == set() => "no binarixs": todo lo que NO sea 1 o 2
+        if target_gender_ids is not None:
+            pgid = profile.get("gender_id")
+            if not isinstance(pgid, int):
                 return False
-            if profile_so_id not in recommendable_set:
-                return False
+
+            # No binarixs: aceptar cualquier id distinto a 1/2
+            if user_sexual_orientation_id == 2:
+                if pgid in {MALE_ID, FEMALE_ID}:
+                    return False
+            else:
+                if pgid not in target_gender_ids:
+                    return False
 
         return True
     
@@ -137,15 +160,13 @@ def filter_compatible_profiles(
     compatible_profiles = [profile for profile in all_other_users if is_compatible(profile)]
     logger.info(
         f"[filter-compatible] compatible={len(compatible_profiles)} "
-        f"(recommendable_set={sorted(list(recommendable_set)) if recommendable_set is not None else None})"
+        f"(target_gender_ids={sorted(list(target_gender_ids)) if target_gender_ids is not None else None} "
+        f"user_preference_so_id={user_sexual_orientation_id} user_preference_so={_normalize_str(user_sexual_orientation)})"
     )
 
-    if recommendable_set is not None and len(compatible_profiles) < min_orientation_pool:
-        logger.info(
-            f"[filter-compatible] orientation pool too small ({len(compatible_profiles)} < {min_orientation_pool}), "
-            "falling back to non-strict filtering"
-        )
-        compatible_profiles = all_other_users
+    # Nunca hacer fallback a perfiles incompatibles por género.
+    if not compatible_profiles:
+        return {"profiles": [], "count": 0, "is_recycled": False}
     
     new_compatible = [p for p in compatible_profiles if p["id"] not in excluded_ids]
     recycled_compatible = [p for p in compatible_profiles if p["id"] in excluded_ids]
@@ -156,15 +177,6 @@ def filter_compatible_profiles(
     elif recycled_compatible and allow_recycling:
         profiles_to_rank = recycled_compatible
         is_recycled = True
-    elif allow_recycling:
-        new_any = [p for p in all_other_users if p["id"] not in excluded_ids]
-        if new_any:
-            profiles_to_rank = new_any
-            is_recycled = False
-        else:
-            # Último recurso: reciclar todos
-            profiles_to_rank = all_other_users
-            is_recycled = True
     else:
         profiles_to_rank = []
         is_recycled = False
