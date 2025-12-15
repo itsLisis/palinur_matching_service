@@ -334,3 +334,108 @@ def get_active_relationship(
         state="matched",
         creation_date=relationship.creation_date
     )
+
+
+@router.post("/relationships/{relationship_id}/dismatch")
+def dismatch_relationship(
+    relationship_id: int,
+    current_user_id: int = Query(..., description="ID del usuario que rompe el match"),
+    db: Session = Depends(get_db),
+):
+
+    relationship = db.query(models.Couple_Relationship).filter(
+        models.Couple_Relationship.id == relationship_id
+    ).first()
+    if not relationship:
+        raise HTTPException(status_code=404, detail="Relationship not found")
+
+    if current_user_id not in (relationship.first_user_fk, relationship.second_user_fk):
+        raise HTTPException(status_code=403, detail="You are not part of this relationship")
+
+    inactive_state = db.query(models.Relationship_State).filter(
+        models.Relationship_State.state == "inactive"
+    ).first()
+    if not inactive_state:
+        raise HTTPException(status_code=500, detail="Estado 'inactive' no encontrado en la base de datos")
+
+    relationship.state_fk = inactive_state.id
+
+    user_a = relationship.first_user_fk
+    user_b = relationship.second_user_fk
+
+    db.query(models.Swiped_Users).filter(
+        or_(
+            and_(
+                models.Swiped_Users.current_user_fk == user_a,
+                models.Swiped_Users.swiped_user_fk == user_b,
+            ),
+            and_(
+                models.Swiped_Users.current_user_fk == user_b,
+                models.Swiped_Users.swiped_user_fk == user_a,
+            ),
+        )
+    ).delete(synchronize_session=False)
+
+    db.commit()
+
+    return {
+        "success": True,
+        "relationship_id": relationship.id,
+        "state": "inactive",
+        "user1_id": relationship.first_user_fk,
+        "user2_id": relationship.second_user_fk,
+        "removed_swipes_between": [user_a, user_b],
+    }
+
+
+@router.get("/connections/{user_id}")
+def get_connections_history(
+    user_id: int,
+    db: Session = Depends(get_db),
+):
+
+    relationships = db.query(models.Couple_Relationship).filter(
+        or_(
+            models.Couple_Relationship.first_user_fk == user_id,
+            models.Couple_Relationship.second_user_fk == user_id,
+        )
+    ).order_by(models.Couple_Relationship.creation_date.desc()).all()
+
+    partners: list[int] = []
+    seen: set[int] = set()
+    for rel in relationships:
+        partner_id = rel.second_user_fk if rel.first_user_fk == user_id else rel.first_user_fk
+        if partner_id not in seen:
+            seen.add(partner_id)
+            partners.append(partner_id)
+
+    return {"partners": partners, "count": len(partners)}
+
+
+@router.delete("/internal/users/delete")
+def delete_user_data_internal(
+    user_id: int = Query(...),
+    db: Session = Depends(get_db),
+):
+
+    swipes_deleted = db.query(models.Swiped_Users).filter(
+        or_(
+            models.Swiped_Users.current_user_fk == user_id,
+            models.Swiped_Users.swiped_user_fk == user_id,
+        )
+    ).delete(synchronize_session=False)
+
+    relationships_deleted = db.query(models.Couple_Relationship).filter(
+        or_(
+            models.Couple_Relationship.first_user_fk == user_id,
+            models.Couple_Relationship.second_user_fk == user_id,
+        )
+    ).delete(synchronize_session=False)
+
+    db.commit()
+    return {
+        "success": True,
+        "user_id": user_id,
+        "swipes_deleted": swipes_deleted,
+        "relationships_deleted": relationships_deleted,
+    }
